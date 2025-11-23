@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -20,6 +21,7 @@ const (
 	enrichStateLoading enrichState = iota
 	enrichStateFetching
 	enrichStatePreview
+	enrichStateEditing
 	enrichStateDone
 	enrichStateError
 )
@@ -37,6 +39,10 @@ type EnrichModel struct {
 	err        error
 	processed  int
 	skipped    int
+	// Edit mode
+	textInputs []textinput.Model
+	fieldNames []string
+	editField  int
 }
 
 type tasksLoadedMsg struct {
@@ -58,13 +64,25 @@ func NewEnrichModel(cfg *config.Config, provider llm.Provider, filter string) *E
 	s.Spinner = spinner.Dot
 	s.Style = spinnerStyle
 
+	// Create text inputs for editing (no Description - preserved from bugwarrior)
+	fields := []string{"Beacons", "Directions", "Project", "Priority", "Due", "Effort", "Impact", "Estimate", "Fun"}
+	inputs := make([]textinput.Model, len(fields))
+	for i := range inputs {
+		ti := textinput.New()
+		ti.Prompt = ""
+		ti.CharLimit = 256
+		inputs[i] = ti
+	}
+
 	return &EnrichModel{
-		cfg:      cfg,
-		provider: provider,
-		twClient: taskwarrior.New(),
-		filter:   filter,
-		state:    enrichStateLoading,
-		spinner:  s,
+		cfg:        cfg,
+		provider:   provider,
+		twClient:   taskwarrior.New(),
+		filter:     filter,
+		state:      enrichStateLoading,
+		spinner:    s,
+		textInputs: inputs,
+		fieldNames: fields,
 	}
 }
 
@@ -202,10 +220,53 @@ func (m *EnrichModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "enter", "a":
 			// Accept and apply
 			return m, m.applyEnrichment()
+		case "e":
+			// Enter edit mode
+			m.populateInputs()
+			m.state = enrichStateEditing
+			m.editField = 0
+			m.textInputs[0].Focus()
+			return m, nil
 		case "s", "n":
 			// Skip this task
 			m.skipped++
 			return m, m.nextTask()
+		}
+
+	case enrichStateEditing:
+		switch msg.String() {
+		case "ctrl+c":
+			return m, tea.Quit
+		case "esc":
+			// Exit edit mode back to preview
+			m.state = enrichStatePreview
+			return m, nil
+		case "enter":
+			// Save and go to next field or exit edit mode
+			m.updateEnrichmentFromInputs()
+			if m.editField < len(m.textInputs)-1 {
+				m.textInputs[m.editField].Blur()
+				m.editField++
+				m.textInputs[m.editField].Focus()
+			} else {
+				m.state = enrichStatePreview
+			}
+			return m, nil
+		case "tab":
+			m.textInputs[m.editField].Blur()
+			m.editField = (m.editField + 1) % len(m.textInputs)
+			m.textInputs[m.editField].Focus()
+			return m, nil
+		case "shift+tab":
+			m.textInputs[m.editField].Blur()
+			m.editField = (m.editField - 1 + len(m.textInputs)) % len(m.textInputs)
+			m.textInputs[m.editField].Focus()
+			return m, nil
+		default:
+			// Update current text input
+			var cmd tea.Cmd
+			m.textInputs[m.editField], cmd = m.textInputs[m.editField].Update(msg)
+			return m, cmd
 		}
 
 	case enrichStateError, enrichStateDone:
@@ -226,6 +287,36 @@ func (m *EnrichModel) nextTask() tea.Cmd {
 	return tea.Batch(m.spinner.Tick, m.enrichCurrent())
 }
 
+func (m *EnrichModel) populateInputs() {
+	if m.enrichment == nil {
+		return
+	}
+	m.textInputs[0].SetValue(strings.Join(m.enrichment.Beacons, " "))
+	m.textInputs[1].SetValue(strings.Join(m.enrichment.Directions, " "))
+	m.textInputs[2].SetValue(m.enrichment.Project)
+	m.textInputs[3].SetValue(m.enrichment.Priority)
+	m.textInputs[4].SetValue(m.enrichment.Due)
+	m.textInputs[5].SetValue(m.enrichment.Effort)
+	m.textInputs[6].SetValue(m.enrichment.Impact)
+	m.textInputs[7].SetValue(m.enrichment.Estimate)
+	m.textInputs[8].SetValue(m.enrichment.Fun)
+}
+
+func (m *EnrichModel) updateEnrichmentFromInputs() {
+	if m.enrichment == nil {
+		m.enrichment = &llm.Enrichment{}
+	}
+	m.enrichment.Beacons = splitTags(m.textInputs[0].Value())
+	m.enrichment.Directions = splitTags(m.textInputs[1].Value())
+	m.enrichment.Project = m.textInputs[2].Value()
+	m.enrichment.Priority = m.textInputs[3].Value()
+	m.enrichment.Due = m.textInputs[4].Value()
+	m.enrichment.Effort = m.textInputs[5].Value()
+	m.enrichment.Impact = m.textInputs[6].Value()
+	m.enrichment.Estimate = m.textInputs[7].Value()
+	m.enrichment.Fun = m.textInputs[8].Value()
+}
+
 func (m *EnrichModel) View() string {
 	switch m.state {
 	case enrichStateLoading:
@@ -234,6 +325,8 @@ func (m *EnrichModel) View() string {
 		return m.viewFetching()
 	case enrichStatePreview:
 		return m.viewPreview()
+	case enrichStateEditing:
+		return m.viewEditing()
 	case enrichStateDone:
 		return m.viewDone()
 	case enrichStateError:
@@ -321,7 +414,30 @@ func (m *EnrichModel) viewPreview() string {
 
 	sb.WriteString(boxStyle.Render(content.String()))
 	sb.WriteString("\n\n")
-	sb.WriteString(helpStyle.Render("[enter/a] Accept  [s/n] Skip  [esc/q] Done"))
+	sb.WriteString(helpStyle.Render("[enter/a] Accept  [e] Edit  [s/n] Skip  [esc/q] Done"))
+
+	return sb.String()
+}
+
+func (m *EnrichModel) viewEditing() string {
+	var sb strings.Builder
+	task := m.tasks[m.current]
+
+	sb.WriteString(titleStyle.Render(fmt.Sprintf("tg enrich - Edit Mode (%d/%d)", m.current+1, len(m.tasks))) + "\n\n")
+	sb.WriteString(labelStyle.Render("Task:") + " " + subtitleStyle.Render(task.Description) + "\n\n")
+
+	for i, name := range m.fieldNames {
+		style := labelStyle
+		if i == m.editField {
+			style = selectedStyle
+		}
+		sb.WriteString(style.Render(name+":") + " ")
+		sb.WriteString(m.textInputs[i].View())
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString("\n")
+	sb.WriteString(helpStyle.Render("[tab] Next  [shift+tab] Prev  [enter] Save  [esc] Back"))
 
 	return sb.String()
 }

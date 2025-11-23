@@ -75,6 +75,17 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
+	// Apply defaults for empty fields (viper defaults only work when config file is missing)
+	if cfg.LLM.Provider == "" {
+		cfg.LLM.Provider = "anthropic"
+	}
+	if cfg.LLM.Model == "" {
+		cfg.LLM.Model = "claude-sonnet-4-5-20250929"
+	}
+	if cfg.LLM.APIKeyEnv == "" {
+		cfg.LLM.APIKeyEnv = "ANTHROPIC_API_KEY"
+	}
+
 	// Use default beacons if none configured
 	if len(cfg.Beacons) == 0 {
 		cfg.Beacons = DefaultBeacons()
