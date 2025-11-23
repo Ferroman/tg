@@ -1,0 +1,55 @@
+# tg - Taskwarrior LLM Wrapper Configuration
+# Copy this file to ~/.config/tg/config.yaml
+
+# LLM Provider Configuration
+llm:
+  # Provider: anthropic, openai, or ollama
+  provider: anthropic
+
+  # Model to use (provider-specific)
+  # Anthropic: claude-sonnet-4-5-20250929, claude-3-haiku-20240307
+  # OpenAI: gpt-4o, gpt-4-turbo, gpt-3.5-turbo
+  # Ollama: llama3.2, mistral, etc.
+  model: claude-sonnet-4-5-20250929
+
+  # Environment variable containing the API key
+  api_key_env: ANTHROPIC_API_KEY
+
+  # Base URL (only needed for Ollama or custom endpoints)
+  # base_url: http://localhost:11434
+
+# Project Detection
+# Define keywords that help the LLM assign tasks to projects
+projects:
+  - name: company-a
+    keywords:
+      - "JIRA-"
+      - "company-a"
+      - "acme"
+
+  - name: company-b
+    keywords:
+      - "LINEAR-"
+      - "company-b"
+
+  - name: home
+    keywords:
+      - "personal"
+      - "home"
+      - "family"
+
+# Beacons Configuration (optional)
+# If not specified, the default Beacons system will be used
+# You can customize or extend it here
+#
+# beacons:
+#   - name: "Be Organized"
+#     tag: "b.organized"
+#     description: "Focus on personal organization and productivity"
+#     directions:
+#       - name: "Develop organization habits"
+#         tag: "d.org.habits"
+#         description: "Building habits for better organization"
+#       - name: "Improve tooling"
+#         tag: "d.org.tooling"
+#         description: "Better tools and systems for organization"
