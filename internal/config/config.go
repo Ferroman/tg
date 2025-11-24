@@ -9,9 +9,17 @@ import (
 )
 
 type Config struct {
-	LLM      LLMConfig      `mapstructure:"llm"`
-	Projects []Project      `mapstructure:"projects"`
-	Beacons  []Beacon       `mapstructure:"beacons"`
+	LLM          LLMConfig    `mapstructure:"llm"`
+	Projects     []Project    `mapstructure:"projects"`
+	Beacons      []Beacon     `mapstructure:"beacons"`
+	FocusGroups  []FocusGroup `mapstructure:"focus_groups"`
+	DefaultQuota int          `mapstructure:"default_quota"` // Default tasks per project in focus list
+}
+
+type FocusGroup struct {
+	Name     string   `mapstructure:"name"`
+	Patterns []string `mapstructure:"patterns"` // Glob patterns like "er.*", "personal.*"
+	Quota    int      `mapstructure:"quota"`
 }
 
 type LLMConfig struct {
@@ -24,6 +32,7 @@ type LLMConfig struct {
 type Project struct {
 	Name     string   `mapstructure:"name"`
 	Keywords []string `mapstructure:"keywords"`
+	Quota    int      `mapstructure:"quota"` // Tasks per focus list, default 2
 }
 
 type Beacon struct {
@@ -91,6 +100,11 @@ func Load() (*Config, error) {
 		cfg.Beacons = DefaultBeacons()
 	}
 
+	// Default quota for focus list
+	if cfg.DefaultQuota == 0 {
+		cfg.DefaultQuota = 2
+	}
+
 	return &cfg, nil
 }
 
@@ -99,6 +113,71 @@ func (c *Config) GetAPIKey() string {
 		return ""
 	}
 	return os.Getenv(c.LLM.APIKeyEnv)
+}
+
+// GetProjectQuota returns the quota for a specific project, or default if not set
+func (c *Config) GetProjectQuota(projectName string) int {
+	for _, p := range c.Projects {
+		if p.Name == projectName && p.Quota > 0 {
+			return p.Quota
+		}
+	}
+	return c.DefaultQuota
+}
+
+// GetFocusGroup returns the focus group name for a project, or empty string if no match
+func (c *Config) GetFocusGroup(projectName string) string {
+	for _, fg := range c.FocusGroups {
+		// First check if any exclusion pattern matches
+		excluded := false
+		for _, pattern := range fg.Patterns {
+			if len(pattern) > 0 && pattern[0] == '!' {
+				excludePattern := pattern[1:]
+				if matchPattern(excludePattern, projectName) {
+					excluded = true
+					break
+				}
+			}
+		}
+
+		if excluded {
+			continue // Skip this group
+		}
+
+		// Check if any positive pattern matches
+		for _, pattern := range fg.Patterns {
+			if len(pattern) > 0 && pattern[0] != '!' {
+				if matchPattern(pattern, projectName) {
+					return fg.Name
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// GetFocusGroupQuota returns the quota for a focus group
+func (c *Config) GetFocusGroupQuota(groupName string) int {
+	for _, fg := range c.FocusGroups {
+		if fg.Name == groupName && fg.Quota > 0 {
+			return fg.Quota
+		}
+	}
+	return c.DefaultQuota
+}
+
+// matchPattern checks if project matches a glob pattern (supports * and ?)
+func matchPattern(pattern, project string) bool {
+	if pattern == "*" {
+		return true
+	}
+	// Simple glob matching: "er.*" matches "er.release", "er.sre", etc.
+	// "personal" matches exactly "personal"
+	if len(pattern) > 0 && pattern[len(pattern)-1] == '*' {
+		prefix := pattern[:len(pattern)-1]
+		return len(project) >= len(prefix) && project[:len(prefix)] == prefix
+	}
+	return pattern == project
 }
 
 // DefaultBeacons returns the embedded Beacons system

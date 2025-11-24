@@ -14,11 +14,13 @@ type Enrichment struct {
 	Directions  []string `json:"directions"`  // e.g., ["d.sw.design", "d.test.write"]
 	Project     string   `json:"project"`
 	Priority    string   `json:"priority"`    // H, M, L or empty
-	Due         string   `json:"due"`         // taskwarrior due format or empty
+	Due         string   `json:"due"`         // Hard deadline (taskwarrior due format or empty)
+	Scheduled   string   `json:"scheduled"`   // Soft due date - when you'd prefer to do it
 	Effort      string   `json:"effort"`      // E (easy), N (normal), D (difficult)
 	Impact      string   `json:"impact"`      // H (high), M (medium), L (low)
 	Estimate    string   `json:"estimate"`    // 15m, 30m, 1h, 2h, 4h, 8h, 2d
 	Fun         string   `json:"fun"`         // H (high/fun), M (medium), L (low/boring)
+	Blocks      int      `json:"blocks"`      // Number of things/people this task unblocks
 	IsWaste     bool     `json:"is_waste"`    // true if task doesn't align with any beacon
 	Reasoning   string   `json:"reasoning"`   // explanation for the enrichment
 }

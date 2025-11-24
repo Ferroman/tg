@@ -27,6 +27,8 @@ func main() {
 		runAdd()
 	case "enrich":
 		runEnrich()
+	case "focus":
+		runFocus()
 	case "help", "--help", "-h":
 		printHelp()
 	case "version", "--version", "-v":
@@ -94,6 +96,22 @@ func runEnrich() {
 	}
 }
 
+func runFocus() {
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
+		os.Exit(1)
+	}
+
+	model := tui.NewFocusModel(cfg)
+	p := tea.NewProgram(model)
+
+	if _, err := p.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
 func passthrough() {
 	// Pass all args to task command
 	args := os.Args[1:]
@@ -124,6 +142,10 @@ COMMANDS:
     enrich [filter]      Batch enrich existing tasks
                          Without filter: enriches all pending tasks without beacon tags
                          With filter: enriches tasks matching the taskwarrior filter
+
+    focus                Show balanced focus list across projects
+                         Respects per-project quotas from config
+                         Sorted by urgency within each project's quota
 
     <any task command>   Passes through to taskwarrior
                          Example: tg list, tg done 5, tg project:work

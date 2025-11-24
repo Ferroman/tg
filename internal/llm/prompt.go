@@ -58,6 +58,25 @@ Ask: "Would X time be enough?" - when answer is "maybe", double it.
 - M (Medium): Neutral
 - L (Low): Boring, tedious (these get urgency bump to get them done)
 
+### Blocking (how many things/people this unblocks)
+- 0: Doesn't block anything
+- 1-2: Blocks a few things (e.g., a feature that enables 1-2 other tasks)
+- 3-5: Significant blocker (e.g., API that multiple features depend on, review blocking teammates)
+- 6+: Critical blocker (e.g., infrastructure change blocking entire team, deployment blocker)
+
+Examples:
+- "Deploy API to production" might block=5 (multiple teams waiting)
+- "Fix typo in docs" block=0 (nobody waiting)
+- "Review PR for authentication" block=2 (author + downstream feature)
+- "Set up CI pipeline" block=8 (blocks entire team from deploying)
+
+### Due Dates
+- **due**: Hard deadline - must be done by this date (external pressure, meetings, launches)
+- **scheduled**: Soft due date - when you'd PREFER to do this task (internal preference)
+
+Use scheduled for tasks without external deadlines but with desired timing.
+Only set due when there's actual external pressure/deadline.
+
 ## Task to Analyze
 "%s"
 
@@ -67,10 +86,12 @@ Ask: "Would X time be enough?" - when answer is "maybe", double it.
 3. Identify specific Directions within those Beacons
 4. Suggest a project if keywords match
 5. Suggest priority (H=high, M=medium, L=low) based on external pressure/deadlines
-6. Assess effort, impact, time estimate, and fun level
-7. Suggest due date only if there's a clear time reference in the task
-8. Optionally improve the description to be more actionable
-9. If the task doesn't align with any beacon, mark it as waste
+6. Assess effort, impact, time estimate, fun level, and blocking count
+7. Suggest due date only if there's a clear HARD deadline in the task
+8. Suggest scheduled date for when you'd prefer to do the task (soft due date)
+9. Estimate how many things/people this task unblocks (blocks field)
+10. Optionally improve the description to be more actionable
+11. If the task doesn't align with any beacon, mark it as waste
 
 Respond with ONLY a JSON object in this exact format:
 {
@@ -79,11 +100,13 @@ Respond with ONLY a JSON object in this exact format:
   "directions": ["d.direction1", "d.direction2"],
   "project": "project-name or empty string",
   "priority": "H/M/L or empty string",
-  "due": "taskwarrior due format (e.g., 'tomorrow', '2024-12-01', 'eow') or empty string",
+  "due": "hard deadline in taskwarrior format (e.g., '2024-12-01', 'friday') or empty string",
+  "scheduled": "soft due date - when you'd prefer to work on it (e.g., 'monday', '2024-11-25') or empty string",
   "effort": "E/N/D",
   "impact": "H/M/L",
   "estimate": "15m/30m/1h/2h/4h/8h/2d",
   "fun": "H/M/L",
+  "blocks": 0,
   "is_waste": false,
   "reasoning": "brief explanation of the assessment"
 }

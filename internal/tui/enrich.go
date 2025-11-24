@@ -65,7 +65,7 @@ func NewEnrichModel(cfg *config.Config, provider llm.Provider, filter string) *E
 	s.Style = spinnerStyle
 
 	// Create text inputs for editing (no Description - preserved from bugwarrior)
-	fields := []string{"Beacons", "Directions", "Project", "Priority", "Due", "Effort", "Impact", "Estimate", "Fun"}
+	fields := []string{"Beacons", "Directions", "Project", "Priority", "Due", "Scheduled", "Effort", "Impact", "Estimate", "Fun", "Blocks"}
 	inputs := make([]textinput.Model, len(fields))
 	for i := range inputs {
 		ti := textinput.New()
@@ -132,13 +132,20 @@ func (m *EnrichModel) applyEnrichment() tea.Cmd {
 	return func() tea.Msg {
 		modified := &taskwarrior.Task{
 			Description: enrichment.Description,
-			Project:     enrichment.Project,
 			Priority:    enrichment.Priority,
 			Due:         enrichment.Due,
+			Scheduled:   enrichment.Scheduled,
 			Effort:      enrichment.Effort,
 			Impact:      enrichment.Impact,
 			Estimate:    enrichment.Estimate,
 			Fun:         enrichment.Fun,
+			Blocks:      enrichment.Blocks,
+		}
+
+		// Only set project if task doesn't already have one
+		// This preserves bugwarrior-synced projects and prevents accidental overwrites
+		if task.Project == "" {
+			modified.Project = enrichment.Project
 		}
 
 		modified.Tags = append(modified.Tags, enrichment.Beacons...)
@@ -296,10 +303,12 @@ func (m *EnrichModel) populateInputs() {
 	m.textInputs[2].SetValue(m.enrichment.Project)
 	m.textInputs[3].SetValue(m.enrichment.Priority)
 	m.textInputs[4].SetValue(m.enrichment.Due)
-	m.textInputs[5].SetValue(m.enrichment.Effort)
-	m.textInputs[6].SetValue(m.enrichment.Impact)
-	m.textInputs[7].SetValue(m.enrichment.Estimate)
-	m.textInputs[8].SetValue(m.enrichment.Fun)
+	m.textInputs[5].SetValue(m.enrichment.Scheduled)
+	m.textInputs[6].SetValue(m.enrichment.Effort)
+	m.textInputs[7].SetValue(m.enrichment.Impact)
+	m.textInputs[8].SetValue(m.enrichment.Estimate)
+	m.textInputs[9].SetValue(m.enrichment.Fun)
+	m.textInputs[10].SetValue(fmt.Sprintf("%d", m.enrichment.Blocks))
 }
 
 func (m *EnrichModel) updateEnrichmentFromInputs() {
@@ -311,10 +320,12 @@ func (m *EnrichModel) updateEnrichmentFromInputs() {
 	m.enrichment.Project = m.textInputs[2].Value()
 	m.enrichment.Priority = m.textInputs[3].Value()
 	m.enrichment.Due = m.textInputs[4].Value()
-	m.enrichment.Effort = m.textInputs[5].Value()
-	m.enrichment.Impact = m.textInputs[6].Value()
-	m.enrichment.Estimate = m.textInputs[7].Value()
-	m.enrichment.Fun = m.textInputs[8].Value()
+	m.enrichment.Scheduled = m.textInputs[5].Value()
+	m.enrichment.Effort = m.textInputs[6].Value()
+	m.enrichment.Impact = m.textInputs[7].Value()
+	m.enrichment.Estimate = m.textInputs[8].Value()
+	m.enrichment.Fun = m.textInputs[9].Value()
+	m.enrichment.Blocks = parseBlocks(m.textInputs[10].Value())
 }
 
 func (m *EnrichModel) View() string {
@@ -398,15 +409,22 @@ func (m *EnrichModel) viewPreview() string {
 	}
 	content.WriteString("\n")
 
-	content.WriteString(labelStyle.Render("Project:") + " " + valueOrNone(m.enrichment.Project) + "\n")
+	// Show project with preservation indicator
+	if task.Project != "" {
+		content.WriteString(labelStyle.Render("Project:") + " " + valueStyle.Render(task.Project) + " " + lipgloss.NewStyle().Foreground(mutedColor).Render("(preserved)") + "\n")
+	} else {
+		content.WriteString(labelStyle.Render("Project:") + " " + valueOrNone(m.enrichment.Project) + "\n")
+	}
 	content.WriteString(labelStyle.Render("Priority:") + " " + valueOrNone(m.enrichment.Priority) + "\n")
-	content.WriteString(labelStyle.Render("Due:") + " " + valueOrNone(m.enrichment.Due) + "\n")
+	content.WriteString(labelStyle.Render("Due:") + " " + valueOrNone(m.enrichment.Due) + " " + lipgloss.NewStyle().Foreground(mutedColor).Render("(hard deadline)") + "\n")
+	content.WriteString(labelStyle.Render("Scheduled:") + " " + valueOrNone(m.enrichment.Scheduled) + " " + lipgloss.NewStyle().Foreground(mutedColor).Render("(soft due date)") + "\n")
 
-	// UDAs: Effort, Impact, Estimate, Fun
+	// UDAs: Effort, Impact, Estimate, Fun, Blocks
 	content.WriteString(labelStyle.Render("Effort:") + " " + formatUDA(m.enrichment.Effort, "E=Easy N=Normal D=Difficult") + "\n")
 	content.WriteString(labelStyle.Render("Impact:") + " " + formatUDA(m.enrichment.Impact, "H=High M=Medium L=Low") + "\n")
 	content.WriteString(labelStyle.Render("Estimate:") + " " + valueOrNone(m.enrichment.Estimate) + "\n")
 	content.WriteString(labelStyle.Render("Fun:") + " " + formatUDA(m.enrichment.Fun, "H=Fun M=Neutral L=Boring") + "\n")
+	content.WriteString(labelStyle.Render("Blocks:") + " " + formatBlocks(m.enrichment.Blocks) + "\n")
 
 	if m.enrichment.Reasoning != "" {
 		content.WriteString("\n" + subtitleStyle.Render(m.enrichment.Reasoning))

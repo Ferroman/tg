@@ -16,6 +16,7 @@ type Task struct {
 	Project     string   `json:"project,omitempty"`
 	Priority    string   `json:"priority,omitempty"`
 	Due         string   `json:"due,omitempty"`
+	Scheduled   string   `json:"scheduled,omitempty"` // Soft due date (when you'd prefer to do it)
 	Tags        []string `json:"tags,omitempty"`
 	Status      string   `json:"status,omitempty"`
 	Urgency     float64  `json:"urgency,omitempty"`
@@ -24,6 +25,7 @@ type Task struct {
 	Impact   string `json:"impact,omitempty"`   // H (high), M (medium), L (low)
 	Estimate string `json:"est,omitempty"`      // 15m, 30m, 1h, 2h, 4h, 8h, 2d
 	Fun      string `json:"fun,omitempty"`      // H (high), M (medium), L (low)
+	Blocks   int    `json:"blocks,omitempty"`   // Number of things/people this task unblocks
 }
 
 // Client interacts with the task command
@@ -50,9 +52,14 @@ func (c *Client) Add(t *Task) (string, error) {
 		args = append(args, "priority:"+t.Priority)
 	}
 
-	// Add due date
+	// Add due date (hard deadline)
 	if t.Due != "" {
 		args = append(args, "due:"+t.Due)
+	}
+
+	// Add scheduled date (soft due date)
+	if t.Scheduled != "" {
+		args = append(args, "scheduled:"+t.Scheduled)
 	}
 
 	// Add custom UDAs
@@ -67,6 +74,9 @@ func (c *Client) Add(t *Task) (string, error) {
 	}
 	if t.Fun != "" {
 		args = append(args, "fun:"+t.Fun)
+	}
+	if t.Blocks > 0 {
+		args = append(args, fmt.Sprintf("blocks:%d", t.Blocks))
 	}
 
 	// Add tags
@@ -154,6 +164,10 @@ func (c *Client) Modify(uuid string, t *Task) error {
 		args = append(args, "due:"+t.Due)
 	}
 
+	if t.Scheduled != "" {
+		args = append(args, "scheduled:"+t.Scheduled)
+	}
+
 	// Add custom UDAs
 	if t.Effort != "" {
 		args = append(args, "effort:"+t.Effort)
@@ -166,6 +180,9 @@ func (c *Client) Modify(uuid string, t *Task) error {
 	}
 	if t.Fun != "" {
 		args = append(args, "fun:"+t.Fun)
+	}
+	if t.Blocks > 0 {
+		args = append(args, fmt.Sprintf("blocks:%d", t.Blocks))
 	}
 
 	for _, tag := range t.Tags {

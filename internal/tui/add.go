@@ -58,7 +58,7 @@ func NewAddModel(cfg *config.Config, provider llm.Provider, description string) 
 	s.Style = spinnerStyle
 
 	// Create text inputs for editing
-	fields := []string{"Description", "Beacons", "Directions", "Project", "Priority", "Due", "Effort", "Impact", "Estimate", "Fun"}
+	fields := []string{"Description", "Beacons", "Directions", "Project", "Priority", "Due", "Scheduled", "Effort", "Impact", "Estimate", "Fun", "Blocks"}
 	inputs := make([]textinput.Model, len(fields))
 	for i := range inputs {
 		ti := textinput.New()
@@ -230,10 +230,12 @@ func (m *AddModel) populateInputs() {
 	m.textInputs[3].SetValue(m.enrichment.Project)
 	m.textInputs[4].SetValue(m.enrichment.Priority)
 	m.textInputs[5].SetValue(m.enrichment.Due)
-	m.textInputs[6].SetValue(m.enrichment.Effort)
-	m.textInputs[7].SetValue(m.enrichment.Impact)
-	m.textInputs[8].SetValue(m.enrichment.Estimate)
-	m.textInputs[9].SetValue(m.enrichment.Fun)
+	m.textInputs[6].SetValue(m.enrichment.Scheduled)
+	m.textInputs[7].SetValue(m.enrichment.Effort)
+	m.textInputs[8].SetValue(m.enrichment.Impact)
+	m.textInputs[9].SetValue(m.enrichment.Estimate)
+	m.textInputs[10].SetValue(m.enrichment.Fun)
+	m.textInputs[11].SetValue(fmt.Sprintf("%d", m.enrichment.Blocks))
 }
 
 func (m *AddModel) updateEnrichmentFromInputs() {
@@ -246,10 +248,12 @@ func (m *AddModel) updateEnrichmentFromInputs() {
 	m.enrichment.Project = m.textInputs[3].Value()
 	m.enrichment.Priority = m.textInputs[4].Value()
 	m.enrichment.Due = m.textInputs[5].Value()
-	m.enrichment.Effort = m.textInputs[6].Value()
-	m.enrichment.Impact = m.textInputs[7].Value()
-	m.enrichment.Estimate = m.textInputs[8].Value()
-	m.enrichment.Fun = m.textInputs[9].Value()
+	m.enrichment.Scheduled = m.textInputs[6].Value()
+	m.enrichment.Effort = m.textInputs[7].Value()
+	m.enrichment.Impact = m.textInputs[8].Value()
+	m.enrichment.Estimate = m.textInputs[9].Value()
+	m.enrichment.Fun = m.textInputs[10].Value()
+	m.enrichment.Blocks = parseBlocks(m.textInputs[11].Value())
 }
 
 func splitTags(s string) []string {
@@ -267,6 +271,16 @@ func splitTags(s string) []string {
 	return tags
 }
 
+func parseBlocks(s string) int {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0
+	}
+	var n int
+	fmt.Sscanf(s, "%d", &n)
+	return n
+}
+
 func (m *AddModel) addTask() tea.Cmd {
 	return func() tea.Msg {
 		var task taskwarrior.Task
@@ -278,10 +292,12 @@ func (m *AddModel) addTask() tea.Cmd {
 			task.Project = m.enrichment.Project
 			task.Priority = m.enrichment.Priority
 			task.Due = m.enrichment.Due
+			task.Scheduled = m.enrichment.Scheduled
 			task.Effort = m.enrichment.Effort
 			task.Impact = m.enrichment.Impact
 			task.Estimate = m.enrichment.Estimate
 			task.Fun = m.enrichment.Fun
+			task.Blocks = m.enrichment.Blocks
 
 			// Combine beacons and directions as tags
 			task.Tags = append(task.Tags, m.enrichment.Beacons...)
@@ -362,16 +378,18 @@ func (m *AddModel) viewPreview() string {
 	}
 	content.WriteString("\n")
 
-	// Project, Priority, Due
+	// Project, Priority, Dates
 	content.WriteString(labelStyle.Render("Project:") + " " + valueOrNone(m.enrichment.Project) + "\n")
 	content.WriteString(labelStyle.Render("Priority:") + " " + valueOrNone(m.enrichment.Priority) + "\n")
-	content.WriteString(labelStyle.Render("Due:") + " " + valueOrNone(m.enrichment.Due) + "\n")
+	content.WriteString(labelStyle.Render("Due:") + " " + valueOrNone(m.enrichment.Due) + " " + lipgloss.NewStyle().Foreground(mutedColor).Render("(hard deadline)") + "\n")
+	content.WriteString(labelStyle.Render("Scheduled:") + " " + valueOrNone(m.enrichment.Scheduled) + " " + lipgloss.NewStyle().Foreground(mutedColor).Render("(soft due date)") + "\n")
 
-	// UDAs: Effort, Impact, Estimate, Fun
+	// UDAs: Effort, Impact, Estimate, Fun, Blocks
 	content.WriteString(labelStyle.Render("Effort:") + " " + formatUDA(m.enrichment.Effort, "E=Easy N=Normal D=Difficult") + "\n")
 	content.WriteString(labelStyle.Render("Impact:") + " " + formatUDA(m.enrichment.Impact, "H=High M=Medium L=Low") + "\n")
 	content.WriteString(labelStyle.Render("Estimate:") + " " + valueOrNone(m.enrichment.Estimate) + "\n")
 	content.WriteString(labelStyle.Render("Fun:") + " " + formatUDA(m.enrichment.Fun, "H=Fun M=Neutral L=Boring") + "\n")
+	content.WriteString(labelStyle.Render("Blocks:") + " " + formatBlocks(m.enrichment.Blocks) + "\n")
 
 	// Reasoning
 	if m.enrichment.Reasoning != "" {
@@ -427,4 +445,20 @@ func formatUDA(value, hint string) string {
 		return lipgloss.NewStyle().Foreground(mutedColor).Render("--")
 	}
 	return valueStyle.Render(value) + " " + lipgloss.NewStyle().Foreground(mutedColor).Render("("+hint+")")
+}
+
+func formatBlocks(n int) string {
+	if n == 0 {
+		return lipgloss.NewStyle().Foreground(mutedColor).Render("0 (not blocking)")
+	}
+	var hint string
+	switch {
+	case n >= 6:
+		hint = "critical blocker"
+	case n >= 3:
+		hint = "significant blocker"
+	default:
+		hint = "minor blocker"
+	}
+	return valueStyle.Render(fmt.Sprintf("%d", n)) + " " + lipgloss.NewStyle().Foreground(mutedColor).Render("("+hint+")")
 }
